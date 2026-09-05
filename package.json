@@ -11,7 +11,10 @@
     "build": "tsc --noEmit && vite build",
     "start": "node server/index.mjs",
     "check": "tsc --noEmit",
-    "test": "node scripts/test-api.mjs && node scripts/test-inquiry.mjs"
+    "test": "node scripts/test-api.mjs && node scripts/test-inquiry.mjs && node scripts/test-public.mjs",
+    "export:public": "node scripts/export-public.mjs",
+    "build:pages": "tsc --noEmit && vite build --mode pages",
+    "test:pages": "node scripts/test-pages.mjs"
   },
   "dependencies": {
     "react": "19.2.6",

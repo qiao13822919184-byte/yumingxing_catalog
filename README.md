@@ -1,6 +1,8 @@
 # Yumingxing 在线产品图册
 
-独立运行的餐厨具图册：React + Vite 前台，Node.js 24 原生 HTTP 服务，SQLite 数据库与本地图片存储。**不依赖 Codex Sites、Cloudflare 或 ChatGPT 登录。**
+独立运行的餐厨具图册：React + Vite 前台发布到 GitHub Pages，Node.js 24 后台、SQLite 数据库与原始上传图片保存在本机。**不依赖 Codex Sites、Cloudflare 或 ChatGPT 登录。**
+
+客户访问地址：[https://qiao13822919184-byte.github.io/yumingxing_catalog/](https://qiao13822919184-byte.github.io/yumingxing_catalog/)。线上提供产品浏览、了解清单、CSV/PDF 导出与 WhatsApp 入口，后台仍在本机使用。发布成功后，客户浏览不需要您的电脑持续开机。
 
 ## 在这台电脑使用
 
@@ -21,6 +23,19 @@ npm start
 ```
 
 开发使用 `npm run dev`，前台为 http://127.0.0.1:5173，接口由 3000 端口提供。
+
+## 修改产品后如何更新线上图册
+
+1. 启动本机图册，进入后台编辑产品、分类或页面设置，检查预览并保存。
+2. 双击 **发布前台.cmd**。脚本从本机 SQLite 生成公开快照，只包含已核验上架的产品、公开设置及实际引用的图片。
+3. 脚本自动测试、构建，提交 `publication/` 并推送到本仓库的 `main` 分支。需要本机 Git 已登录有推送权限的 GitHub 账号。
+4. 查看 [Pages 发布状态](https://github.com/qiao13822919184-byte/yumingxing_catalog/actions/workflows/pages.yml)，部署成功后客户刷新网址即可看到更新。
+
+**后台保存只更新本机，执行发布后才更新线上。** 该过程不会上传数据库、管理员密码、会话、客户清单或未上架产品；已上架产品使用的图片会作为公开文件发布。后台上传后未被公开内容引用的图片不会进入快照。
+
+发布脚本要求 `main` 分支、正确的 `origin` 和干净的 Git 工作区，避免夹带无关文件。若您修改了网站代码，请先检查并提交这些源码改动，再运行发布脚本。发生失败时保留现有文件供检查，不会强制推送或丢弃改动。线上发布由 GitHub Actions 完成，普通 `main` 分支推送也会触发；CI 直接使用已经提交的快照，不会用初始资料覆盖它。
+
+终端方式：`powershell -NoProfile -ExecutionPolicy Bypass -File scripts/publish-pages.ps1`。只在本机预览静态发布版本时，可执行 `npm run export:public` 和 `npm run build:pages`；单独运行这两条命令不会将内容上传到 GitHub。
 
 ## 已实现的前台
 
@@ -63,11 +78,12 @@ WhatsApp 直连会预填文字，用户仍需点击发送。它不能自动附�
 | `app/`、`server/`、`scripts/` | 前后台逻辑、部署与测试 | 是 |
 | `app/data/catalog.json` | 首次初始化的产品资料 | 是 |
 | `public/catalog-products/` | 初始产品图片 | 是 |
+| `publication/` | 线上公开资料及其引用图片的发布快照 | 是 |
 | `data/catalog.sqlite` | 正式产品、分类、页面设置、管理员、会话、审计 | 否 |
 | `data/media/` | 后台上传的产品图片 | 否 |
 | `data/backups/` | 完整自动备份 | 否 |
 | `.local/` | 初始密码、日志和服务进程信息 | 否 |
-| `dist/`、`node_modules/` | 本地生成内容 | 否，可重新构建 |
+| `dist/`、`dist-pages/`、`node_modules/` | 本地生成内容 | 否，可重新构建 |
 
 服务器启动、每日运行、导入/删除前会生成本地完整备份，保留最近 10 份。手动备份：`node scripts/backup.mjs`。备份包含数据库和上传图片。
 
@@ -75,9 +91,9 @@ WhatsApp 直连会预填文字，用户仍需点击发送。它不能自动附�
 
 恢复完整备份：停止服务，先复制当前 `data/` 到安全位置，再用对应备份里的 `catalog.sqlite` 与 `media/` 替换相应内容；清理旧 SQLite WAL/SHM 文件应在服务已停止且已有备份后进行。恢复后使用该备份时的管理员密码。导入 JSON 为按产品 ID 合并更新，不会删除导入文件之外的产品。
 
-## 以后部署到自己的服务器
+## 以后将后台也部署到自己的服务器
 
-`127.0.0.1` 只允许本机访问，客户目前无法通过该地址远程访问。正式对外使用，需要您自己的服务器/域名与 HTTPS。仓库不是静态 GitHub Pages 项目：后台需要持续运行 Node.js 与可写的数据目录。
+`127.0.0.1` 只允许本机访问；客户使用上方的 GitHub Pages 网址即可浏览公开图册。GitHub Pages 只托管静态前台，不能运行 Node.js 后台与 SQLite。如果以后需要在外地登录后台，或让保存立即更新线上，可将整套服务部署到您自己的服务器并配置 HTTPS。
 
 1. 安装 Node.js 24，克隆本仓库，执行 `npm ci` 和 `npm run build`。
 2. 迁移已有 `data/`，或首次启动自动初始化。
@@ -91,7 +107,8 @@ WhatsApp 直连会预填文字，用户仍需点击发送。它不能自动附�
 
 ```powershell
 npm run build
+npm run build:pages
 npm test
 ```
 
-测试使用临时数据目录，不修改正式数据库。测试覆盖权限、持久化、唯一 SKU、组件扩展、分类引用、图片格式、原子导入、备份、导出内容及 PDF 结构。
+测试使用临时数据目录，不修改正式数据库。测试覆盖权限、持久化、唯一 SKU、组件扩展、分类引用、图片格式、原子导入、备份、导出内容、PDF 结构及公开快照边界。
