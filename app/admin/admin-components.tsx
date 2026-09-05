@@ -1,6 +1,9 @@
 import { useEffect, useState } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
 import type { Product, ComponentSpec } from '../catalog-types';
+import { adminImageUrl as githubImageUrl, isGitHubAdmin } from './github-store';
+
+export const adminImageUrl = (path: string): string => isGitHubAdmin ? githubImageUrl(path) : path;
 
 export type Attribute = { id: string; label: string; value: string };
 export type Block = { id: string; type: 'text' | 'image'; title: string; content: string };
@@ -35,7 +38,7 @@ export function UploadButton({ label, onFiles, multiple = false, disabled = fals
 export function ImageOrPlaceholder({ src, label = '暂无图片', alt = '产品图片' }: { src: string; label?: string; alt?: string }) {
   const [failed, setFailed] = useState(false);
   useEffect(() => setFailed(false), [src]);
-  return src && !failed ? <img src={src} alt={alt} onError={() => setFailed(true)} loading="lazy" /> : <div className="adm-image-placeholder"><Icon name="image" /><span>{failed ? '图片暂不可用' : label}</span></div>;
+  return src && !failed ? <img src={adminImageUrl(src)} alt={alt} onError={() => setFailed(true)} loading="lazy" /> : <div className="adm-image-placeholder"><Icon name="image" /><span>{failed ? '图片暂不可用' : label}</span></div>;
 }
 export function Brand() { return <div className="adm-brand"><span className="adm-brand-mark">y<span>m</span></span><div><b>YUMINGXING</b><small>CATALOGUE STUDIO</small></div></div>; }
 export function Stat({ label, number, description }: { label: string; number: number; description: string }) { return <div className="adm-stat"><span>{label}<small>{description}</small></span><strong>{String(number).padStart(2, '0')}</strong></div>; }
@@ -47,14 +50,14 @@ export function OrderActions({ index, length, onMove, onDelete, label }: { index
 export function ProductPreview({ product, categories, images, imageIndex, onImageIndex, accent }: { product: ProductRecord; categories: Category[]; images: string[]; imageIndex: number; onImageIndex: (index: number) => void; accent: string }) {
   return <article className="adm-product-preview" style={{ '--preview-accent': accent } as CSSProperties}>
     <div className="adm-preview-image"><ImageOrPlaceholder alt={product.nameZh || product.nameEn || '未命名产品'} src={images[imageIndex] || images[0] || ''} label="产品主图预览" /><span className={`adm-tag ${product.published ? 'live' : 'draft'}`}>{product.published ? '上架预览' : '草稿预览'}</span></div>
-    {images.length > 1 && <div className="adm-preview-thumbs">{images.map((src, index) => <button key={`${src}-${index}`} className={imageIndex === index ? 'active' : ''} aria-label={`预览图片 ${index + 1}`} onClick={() => onImageIndex(index)}><img src={src} alt={`产品角度 ${index + 1}`} /></button>)}</div>}
+    {images.length > 1 && <div className="adm-preview-thumbs">{images.map((src, index) => <button key={`${src}-${index}`} className={imageIndex === index ? 'active' : ''} aria-label={`预览图片 ${index + 1}`} onClick={() => onImageIndex(index)}><img src={adminImageUrl(src)} alt={`产品角度 ${index + 1}`} /></button>)}</div>}
     <div className="adm-preview-product-content"><div className="adm-preview-category">{categories.find(item => item.id === product.category)?.nameEn || 'PRODUCT COLLECTION'}</div><h2>{product.nameEn || 'English product name'}</h2><h3>{product.nameZh || '中文产品名称'}</h3><div className="adm-preview-codes"><b>{product.sku || 'SKU'}</b>{product.catalogId && <span>原货号 {product.catalogId}</span>}{product.model && <span>型号 {product.model}</span>}</div>
       {(product.descriptionEn || product.descriptionZh) && <div className="adm-preview-description">{product.descriptionEn && <p>{product.descriptionEn}</p>}{product.descriptionZh && <p>{product.descriptionZh}</p>}</div>}
       <div className="adm-preview-metrics"><span><b>{product.components.length}</b> 组件种类</span><span><b>{quantitySummary(product.components)}</b> 每套数量</span></div>
       {!!product.components.length && <section className="adm-preview-specs"><h4>COMPONENTS & SPECIFICATIONS</h4>{product.components.map((component, index) => <div className="adm-preview-component" key={component.id}><b>{component.nameEn || component.nameZh || `Component ${index + 1}`}<span>{component.quantity || '—'} {component.unit}</span></b>{component.nameZh && <small>{component.nameZh}</small>}<dl>{[['Material / 材质', component.material], ['Size / 尺寸', component.size], ['Weight / 单件重量', component.weightG ? `${component.weightG} g` : ''], ['Thickness / 厚度', component.thicknessMm ? `${component.thicknessMm} mm` : '']].filter(([, value]) => value).map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl></div>)}</section>}
       {!!product.attributes?.length && <section className="adm-preview-attributes"><h4>PRODUCT DETAILS</h4><dl>{product.attributes.map(attribute => <div key={attribute.id}><dt>{attribute.label || '属性名称'}</dt><dd>{attribute.value || '—'}</dd></div>)}</dl></section>}
       {!!product.blocks?.length && <section className="adm-preview-blocks">{product.blocks.map(block => <div key={block.id}>{block.title && <h4>{block.title}</h4>}{block.type === 'image' ? <ImageOrPlaceholder alt={block.title || '产品详情图片'} src={block.content} label="详情图片" /> : <p>{block.content || '段落内容预览…'}</p>}</div>)}</section>}
-      <div className="adm-preview-inquiry"><Icon name="plus" />加入询盘清单</div><p className="adm-preview-footnote">内容预览 · 保存后同步至公开图册</p>
+      <div className="adm-preview-inquiry"><Icon name="plus" />加入询盘清单</div><p className="adm-preview-footnote">{isGitHubAdmin ? '内容预览 · 暂存后需发布到网站' : '内容预览 · 保存后同步至公开图册'}</p>
     </div>
   </article>;
 }

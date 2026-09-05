@@ -9,6 +9,11 @@ const output = join(root, 'dist-pages');
 const base = '/yumingxing_catalog/';
 const snapshot = JSON.parse(await readFile(join(output, 'catalog.json'), 'utf8'));
 const html = await readFile(join(output, 'index.html'), 'utf8');
+const adminHtml = await readFile(join(output, 'admin/index.html'), 'utf8');
+assert.match(adminHtml, /\/yumingxing_catalog\/assets\//);
+assert.match(adminHtml, /Content-Security-Policy/);
+assert.match(adminHtml, /script-src 'self'/);
+assert.match(adminHtml, /no-referrer/);
 assert.match(html, /\/yumingxing_catalog\/assets\//);
 assert.match(html, /\/yumingxing_catalog\/favicon.svg/);
 assert.ok(Array.isArray(snapshot.products), 'The published catalogue contains a product list');
@@ -34,13 +39,13 @@ assert.equal(paths.products[0].blocks[0].content, `${base}media/detail.webp`);
 assert.equal(paths.products[0].blocks[1].content, '/text is not an image');
 assert.equal(paths.settings.categories[0].image, '');
 const assets = await readdir(join(output, 'assets'));
-assert.ok(!assets.some(name => name.includes('admin')), 'Public build contains no admin bundle');
+assert.ok(assets.some(name => name.includes('admin')), 'Online admin is built as its own entry');
 for (const name of assets.filter(name => name.endsWith('.js'))) {
   const code = await readFile(join(output, 'assets', name), 'utf8');
-  assert.ok(!code.includes('/api/catalog'), 'Public frontend must not require the local API');
-  assert.ok(!code.includes('/api/admin'), 'Public frontend must not include admin API calls');
+  assert.ok(!/github_pat_[A-Za-z0-9_]{20,}|gh[pousr]_[A-Za-z0-9]{30,}/.test(code), 'No GitHub credential is embedded in the public bundle');
+  assert.ok(!code.includes('node:sqlite') && !code.includes('password_hash'), 'Local server and credential storage are not bundled');
 }
 for (const name of await readdir(output)) {
-  assert.ok(!['data', '.local', 'server', 'app', 'products', 'admin'].includes(name), `Private/unneeded directory in artifact: ${name}`);
+  assert.ok(!['data', '.local', 'server', 'app', 'products', 'content'].includes(name), `Private/unneeded directory in artifact: ${name}`);
 }
-console.log(`Pages checks passed: ${snapshot.products.length} verified products, ${images.size} referenced images, repository paths, static-only frontend and gallery/PDF image mapping.`);
+console.log(`Pages checks passed: ${snapshot.products.length} verified products, ${images.size} referenced images, repository paths, online admin CSP and no embedded credentials or runtime data.`);

@@ -1,12 +1,13 @@
 # Yumingxing independent product catalogue
 
-- The complete app runs locally or on the user's own server. A public frontend snapshot is deployed to GitHub Pages. Never use OpenAI Sites, Cloudflare bindings, or ChatGPT authentication.
+- The complete app runs locally or on the user's own server. GitHub Pages hosts the public frontend and a browser-based GitHub content editor at /admin/. Never use OpenAI Sites, Cloudflare bindings, or ChatGPT authentication.
 - All project source belongs in this directory and the user's GitHub repository `qiao13822919184-byte/yumingxing_catalog`.
-- React + Vite frontend; Node.js 24 HTTP API; SQLite and uploaded media remain under local storage. Never commit runtime databases, login credentials or inquiry notes. Only explicitly published product images may be copied to the public publication/ snapshot; data/media itself and all unpublished uploads stay local.
+- React + Vite frontend; the local service uses Node.js 24 HTTP API and SQLite. The Pages editor uses GitHub APIs and main:content/catalog.json as its content source. content/media/ contains the images deliberately saved through repository publishing. Never commit runtime databases, login credentials or inquiry notes. data/media/ itself remains local; only referenced content images may be copied into content/media/ by an explicit publish action.
 - Preserve real image/product mapping. Display complete product photos with object-fit: contain, never crop the product.
-- Frontend never displays prices. Only published, verified products are public.
+- Frontend never displays prices. Only published, verified products enter the customer-facing Pages snapshot. The repository is public: draft records and content/media/ are NOT confidential, even if omitted from the customer catalogue. Do not put internal quotes, credentials or customer information in product content.
 - Original catalogue code and model are retained; unique SKU identifies a particular style. Existing SKUs are immutable.
 - Components, custom attributes and detail blocks are arrays. Never hard-code a four-piece template or assume number of component rows equals total pieces.
 - Public inquiry list is intentionally device-local. WhatsApp opens a prefilled message; it cannot attach a downloaded document automatically or prove delivery.
-- All admin mutations must require server-side authorization and validation. Database changes must survive process restarts.
+- Local admin mutations require server-side authorization and validation. Database changes must survive process restarts. Online content mutations require GitHub authorization, shared content validation and a validated Actions build. A fine-grained PAT stays in browser memory only; never store it in localStorage, sessionStorage, URLs, logs, exports or source. Use only the fixed repository and allowlisted content paths, make one atomic commit, and update main without force after detecting conflicts. Repository-level Contents permission is not a path-level security boundary.
+- Local SQLite and repository content are independent stores. main:content/catalog.json is the authority for Pages; the legacy publish launcher displays the online admin URL and must not export stale SQLite over repository content. Do not force-push or rewrite history to resolve content conflicts.
 - Before delivery run npm run build, npm test, and verify relevant flows. For Pages changes also run npm run build:pages and npm run test:pages. Keep secrets and runtime files out of Git.

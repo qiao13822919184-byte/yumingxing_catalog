@@ -35,6 +35,11 @@ async function safeRemove(root, target) {
 }
 
 async function readSource(root, source) {
+  if (source === 'repository') {
+    const value = JSON.parse(await readFile(await regularFile(root, join(root, 'content/catalog.json')), 'utf8'));
+    if (value.schemaVersion !== 1) throw new Error('Unsupported online catalogue schema.');
+    return value;
+  }
   if (source === 'seed') {
     const value = JSON.parse(await readFile(await regularFile(root, join(root, 'app/data/catalog.json')), 'utf8'));
     return { products: Array.isArray(value) ? value : value.products, settings: DEFAULT_SETTINGS };
@@ -55,7 +60,7 @@ async function readSource(root, source) {
 
 /** Read-only export of public catalogue data. Never initializes or mutates the local store. */
 export async function exportPublic({ rootDir = projectRoot, source = 'local' } = {}) {
-  if (!['local', 'seed'].includes(source)) throw new Error('Source must be local or seed.');
+  if (!['local', 'seed', 'repository'].includes(source)) throw new Error('Source must be local, seed or repository.');
   const root = await realpath(resolve(rootDir));
   const output = join(root, 'publication');
   const previous = await exists(output);
@@ -65,7 +70,9 @@ export async function exportPublic({ rootDir = projectRoot, source = 'local' } =
   const input = await readSource(root, source);
   const settings = validateSettings(input.settings);
   if (!Array.isArray(input.products)) throw new Error('Invalid product source.');
-  const products = input.products.filter((product) => product.published === true && product.verificationStatus === 'Verified').map((product) => validateProduct(product, settings));
+  const allProducts = source === 'repository' ? input.products.map(product => validateProduct(product, settings)) : input.products;
+  if (source === 'repository' && (new Set(allProducts.map(p => p.id)).size !== allProducts.length || new Set(allProducts.map(p => p.sku.toLowerCase())).size !== allProducts.length)) throw new Error('Online products must have unique IDs and SKUs, including drafts.');
+  const products = allProducts.filter((product) => product.published === true && product.verificationStatus === 'Verified').map((product) => validateProduct(product, settings));
   const skus = new Set();
   const ids = new Set();
   for (const product of products) {
@@ -83,7 +90,7 @@ export async function exportPublic({ rootDir = projectRoot, source = 'local' } =
   // Resolve every source before staging anything so missing or escaping media preserves the snapshot.
   const images = await Promise.all([...imageUrls].sort().map(async (url) => ({
     url,
-    source: await regularFile(root, url.startsWith('/media/') ? join(root, 'data', url.slice(1)) : join(root, 'public', url.slice(1))),
+    source: await regularFile(root, url.startsWith('/media/') ? join(root, source === 'repository' ? 'content' : 'data', url.slice(1)) : join(root, 'public', url.slice(1))),
   })));
   const favicon = await regularFile(root, join(root, 'public/favicon.svg'));
   const generatedAt = new Date().toISOString();
@@ -115,7 +122,7 @@ export async function exportPublic({ rootDir = projectRoot, source = 'local' } =
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
   const args = process.argv.slice(2);
   if (args.length && (args.length !== 2 || args[0] !== '--source')) {
-    console.error('Usage: node scripts/export-public.mjs [--source local|seed]');
+    console.error('Usage: node scripts/export-public.mjs [--source local|seed|repository]');
     process.exitCode = 1;
   } else {
     try { console.log(JSON.stringify(await exportPublic({ source: args[1] ?? 'local' }), null, 2)); }

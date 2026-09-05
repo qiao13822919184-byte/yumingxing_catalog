@@ -7,5 +7,5 @@ export default defineConfig(({ mode }) => ({
  plugins:[react()],
  resolve:{alias:{'@':fileURLToPath(new URL('.',import.meta.url))}},
  server:{host:'127.0.0.1',port:5173,strictPort:true,proxy:{'/api':'http://127.0.0.1:3000','/media':'http://127.0.0.1:3000'}},
- build:{outDir: mode === 'pages' ? 'dist-pages' : 'dist'}
+ build:{outDir: mode === 'pages' ? 'dist-pages' : 'dist', ...(mode === 'pages' ? { rollupOptions: { input: { catalogue: fileURLToPath(new URL('./index.html', import.meta.url)), admin: fileURLToPath(new URL('./admin/index.html', import.meta.url)) } } } : {})}
 }));

@@ -19,7 +19,7 @@ jobs:
       contents: read
       pages: read
     steps:
-      - name: Check out source and public snapshot
+      - name: Check out source and online catalogue
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
@@ -30,7 +30,7 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm test
-      - name: Build from the committed public snapshot
+      - name: Validate online content and build public catalogue and admin
         run: npm run build:pages
       - name: Check the public site artifact
         run: npm run test:pages

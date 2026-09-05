@@ -73,6 +73,21 @@ try {
   for (const category of DEFAULT_SETTINGS.categories) await writeFile(join(seedRoot, 'public', category.image.slice(1)), 'category fixture');
   check((await exportPublic({ rootDir: seedRoot, source: 'seed' })).productCount === 1, 'explicit first seed export works');
   check(!(await readdir(join(seedRoot, 'data'))).includes('catalog.sqlite'), 'seed export does not initialize a database or administrator');
+  await mkdir(join(root, 'content/media'), { recursive: true });
+  await writeFile(join(root, 'content/media/gallery.png'), 'online gallery');
+  await writeFile(join(root, 'content/media/detail.jpg'), 'online detail');
+  const online = { schemaVersion: 1, settings, products: [product, { ...product, id: 'online-draft', sku: 'ONLINE-DRAFT', published: false, image: '/media/private-draft.png', gallery: [], blocks: [] }] };
+  await writeFile(join(root, 'content/catalog.json'), JSON.stringify(online));
+  const onlineResult = await exportPublic({ rootDir: root, source: 'repository' });
+  check(onlineResult.productCount === 1, 'repository source filters unpublished products');
+  check(await readFile(join(root, 'publication/media/gallery.png'), 'utf8') === 'online gallery', 'repository source uses content/media, never stale local media');
+  const onlineSnapshot = await readFile(jsonPath, 'utf8');
+  check(!/SECRET|PRIVATE_NOTE|ONLINE-DRAFT/.test(onlineSnapshot), 'repository snapshot strips private fields and drafts');
+  await writeFile(join(root, 'content/catalog.json'), JSON.stringify({ ...online, products: [...online.products, { ...product, id: 'duplicate' }] }));
+  await rejects(() => exportPublic({ rootDir: root, source: 'repository' }), 'duplicate repository SKU is rejected before deployment');
+  check(await readFile(jsonPath, 'utf8') === onlineSnapshot, 'invalid online content preserves the last successful artifact');
+  await writeFile(join(root, 'content/catalog.json'), JSON.stringify({ ...online, products: [{ ...product, category: 'missing' }] }));
+  await rejects(() => exportPublic({ rootDir: root, source: 'repository' }), 'repository category references are validated');
   console.log(`Public snapshot: ${checks} checks passed.`);
 } finally {
   db?.close();
