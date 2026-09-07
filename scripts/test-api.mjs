@@ -39,6 +39,13 @@ async function start(options = {}) {
 }
 
 try {
+  const sourceSeed = JSON.parse(await readFile(new URL('../app/data/catalog.json', import.meta.url), 'utf8'));
+  const sourceProducts = Array.isArray(sourceSeed) ? sourceSeed : sourceSeed.products;
+  const seedCatalogCounts = new Map();
+  for (const product of sourceProducts) seedCatalogCounts.set(product.catalogId, (seedCatalogCounts.get(product.catalogId) || 0) + 1);
+  const expectedSeedSkus = sourceProducts.map(product => [product.id, product.sku === undefined
+    ? (seedCatalogCounts.get(product.catalogId) > 1 ? `${product.catalogId}-${product.imageId.split('-').at(-1)}` : product.catalogId)
+    : product.sku]);
   const fixtureDist = join(temporaryRoot, 'dist');
   await mkdir(fixtureDist);
   await writeFile(join(fixtureDist, 'index.html'), '<!doctype html><title>Catalog fixture</title>');
@@ -64,12 +71,9 @@ try {
   await client.login(password);
   equal((await request('/api/admin/session')).data, { authenticated: true, username: 'admin' }, 'authenticated session');
   const seeded = (await request('/api/products?includeDrafts=1')).data.products;
-  equal(seeded.length, 110, 'all 110 seed records survive');
-  equal(new Set(seeded.map((p) => p.sku.toLowerCase())).size, 110, 'every seed SKU is unique');
-  check(seeded.filter((p) => p.catalogId === 'CUT-020').every((p) => p.sku === `${p.catalogId}-${p.imageId.split('-').at(-1)}`), 'duplicate catalog IDs gain the image suffix');
-  equal(seeded.find((p) => p.catalogId === 'KIT-U01').sku, 'KIT-U01', 'unique catalog ID remains unchanged');
-  const slashId = seeded.find((p) => p.id.includes('/'));
-  equal((await request(`/api/products/${encodeURIComponent(slashId.id)}`, { method: 'PUT', body: { descriptionEn: 'Edited encoded ID' } })).status, 200, 'encoded legacy IDs can be updated');
+  equal(seeded.length, sourceProducts.length, 'all current seed records survive');
+  equal(new Set(seeded.map((p) => p.sku.toLowerCase())).size, sourceProducts.length, 'every seed SKU is unique');
+  equal(seeded.map(p => [p.id, p.sku]).sort(), expectedSeedSkus.sort(), 'every explicit seed SKU is preserved; only absent legacy SKUs are derived');
   equal((await request('/api/products', { method: 'POST', body: { sku: seeded[0].sku.toLowerCase() } })).status, 409, 'SKU uniqueness is case insensitive');
   equal((await request('/api/products', { method: 'POST', body: { nameEn: 'Missing SKU' } })).status, 400, 'SKU required');
 
@@ -121,7 +125,7 @@ try {
   equal((await request('/product/example')).status, 200, 'product SPA fallback');
 
   const exported = await request('/api/admin/export');
-  equal(exported.data.products.length, 111, 'export includes drafts and new records');
+  equal(exported.data.products.length, sourceProducts.length + 1, 'export includes drafts and new records');
   check(!JSON.stringify(exported.data).includes('password_hash'), 'export contains no credentials');
   const before = (await request(`/api/products?includeDrafts=1`)).data.products.find((p) => p.id === draft.id);
   const invalidImport = { products: [{ ...before, nameEn: 'This must roll back' }, { sku: 'INVALID-PUBLISH', published: true }] };
@@ -137,7 +141,7 @@ try {
   check((await readdir(backupPath)).includes('catalog.sqlite'), 'backup contains SQLite snapshot');
   check((await readdir(join(backupPath, 'media'))).length === 1, 'backup includes uploaded images');
   const snapshot = new DatabaseSync(join(backupPath, 'catalog.sqlite'), { readOnly: true });
-  try { equal(snapshot.prepare('SELECT count(*) AS count FROM products').get().count, 111, 'backup is readable and contains current product data'); }
+  try { equal(snapshot.prepare('SELECT count(*) AS count FROM products').get().count, sourceProducts.length + 1, 'backup is readable and contains current product data'); }
   finally { snapshot.close(); }
   equal(await readFile(join(backupPath, 'media', uploaded.data.url.split('/').at(-1))), png, 'backup preserves image bytes');
   const oldCookie = client.getCookie();
@@ -146,7 +150,7 @@ try {
   request = client.request;
   client.setCookie(oldCookie);
   equal((await request('/api/admin/session')).data.authenticated, true, 'sessions persist across restarts');
-  equal((await request('/api/products?includeDrafts=1')).data.products.length, 111, 'product edits persist across restarts');
+  equal((await request('/api/products?includeDrafts=1')).data.products.length, sourceProducts.length + 1, 'product edits persist across restarts');
   equal(await readFile(join(temporaryRoot, '.local', 'admin-access.txt'), 'utf8'), access, 'restart does not reset administrator');
   equal((await request('/api/admin/change-password', { method: 'POST', body: { currentPassword: password, newPassword: 'short' } })).status, 400, 'new password length validated');
   const nextPassword = 'Test-only-password-with-enough-length-2026';
@@ -160,6 +164,28 @@ try {
   for (let i = 0; i < 5; i++) equal((await request('/api/admin/login', { method: 'POST', body: { username: 'admin', password: 'incorrect' } })).status, 401, 'failed login rejected');
   equal((await request('/api/admin/login', { method: 'POST', body: { username: 'admin', password: nextPassword } })).status, 429, 'login rate limit enforced');
   check(client.app.db.prepare('SELECT count(*) AS count FROM audit_log').get().count > 10, 'administrative operations are audited');
+  await client.close();
+
+  // Exercise legacy compatibility independently of whichever products are in the live seed.
+  const legacySeedPath = join(temporaryRoot, 'legacy-seed.json');
+  const legacyBase = { ...seeded[0], sku: undefined, published: false };
+  await writeFile(legacySeedPath, JSON.stringify({ products: [
+    { ...legacyBase, id: 'legacy-unique', catalogId: 'LEGACY-UNIQUE', imageId: 'PHOTO-001' },
+    { ...legacyBase, id: 'legacy-duplicate-a', catalogId: 'LEGACY-SERIES', imageId: 'PHOTO-002' },
+    { ...legacyBase, id: 'legacy-duplicate-b', catalogId: 'LEGACY-SERIES', imageId: 'PHOTO-003' },
+    { ...legacyBase, id: 'explicit / legacy-id', sku: 'EXPLICIT-REF-004', catalogId: 'LEGACY-SERIES', imageId: 'PHOTO-004' },
+  ] }));
+  client = await start({ dataDir: join(temporaryRoot, 'legacy-data'), localDir: join(temporaryRoot, 'legacy-local'), seedPath: legacySeedPath });
+  const legacyPassword = (await readFile(join(temporaryRoot, 'legacy-local', 'admin-access.txt'), 'utf8')).match(/^Password: (.+)$/m)[1];
+  await client.login(legacyPassword);
+  const legacy = (await client.request('/api/products?includeDrafts=1')).data.products;
+  equal(legacy.find(p => p.id === 'legacy-unique').sku, 'LEGACY-UNIQUE', 'unique legacy catalog ID becomes its SKU');
+  equal(legacy.filter(p => p.id.startsWith('legacy-duplicate')).map(p => p.sku).sort(), ['LEGACY-SERIES-002', 'LEGACY-SERIES-003'], 'duplicate legacy catalog IDs gain image suffixes');
+  equal(legacy.find(p => p.id === 'explicit / legacy-id').sku, 'EXPLICIT-REF-004', 'explicit SKU survives even when its original catalog code is repeated');
+  const encodedLegacy = await client.request(`/api/products/${encodeURIComponent('explicit / legacy-id')}`, { method: 'PUT', body: { descriptionEn: 'Edited encoded ID' } });
+  equal(encodedLegacy.status, 200, 'encoded legacy IDs can be updated');
+  equal(encodedLegacy.data.product.descriptionEn, 'Edited encoded ID', 'encoded update reaches the intended legacy product');
+  equal(encodedLegacy.data.product.sku, 'EXPLICIT-REF-004', 'legacy edit retains its explicit SKU');
   await client.close();
 
   // A one-record fixture verifies deletion persistence without touching the actual catalog.

@@ -78,7 +78,11 @@ export async function initializeStore({ dataDir, localDir, seedPath }) {
       transaction(db, () => {
         saveSettings(db, settings);
         for (const product of seed) {
-          const sku = counts.get(product.catalogId) > 1 ? `${product.catalogId}-${product.imageId.split('-').at(-1)}` : product.catalogId;
+          // A published seed already owns its SKU. Derive one only for legacy
+          // records without this field; an explicit but invalid SKU must fail validation.
+          const sku = product.sku === undefined
+            ? (counts.get(product.catalogId) > 1 ? `${product.catalogId}-${product.imageId.split('-').at(-1)}` : product.catalogId)
+            : product.sku;
           saveProduct(db, validateProduct({ ...product, sku }, settings));
         }
         db.prepare("INSERT INTO meta(key,value) VALUES('initialized','1')").run();
